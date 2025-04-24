@@ -1,19 +1,26 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { format, isBefore, parseISO, isSameDay, isAfter } from "date-fns";
 import Navbar from "@/components/navbar";
 import HabitCard from "@/components/habit-card";
 import AddHabitDialog from "@/components/add-habit-dialog";
 import CompletionHeatmap from "@/components/completion-heatmap";
+import TimeRangeSelector from "@/components/time-range-selector";
+import DatePicker from "@/components/date-picker";
 import { Button } from "@/components/ui/button";
-import { PlusIcon } from "lucide-react";
+import { PlusIcon, Info } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
-import { formatDate } from "@/lib/utils/date-utils";
+import { formatDate, isDateActive } from "@/lib/utils/date-utils";
 import { HabitWithStats } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Dashboard() {
   const { user } = useAuth();
   const [showAddHabitDialog, setShowAddHabitDialog] = useState(false);
+  
+  // Date selection state
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [timeRange, setTimeRange] = useState<string>("30");
   
   const { data: habits, isLoading: isLoadingHabits, error: habitsError } = useQuery<HabitWithStats[]>({
     queryKey: ["/api/habits"],
@@ -23,8 +30,24 @@ export default function Dashboard() {
     queryKey: ["/api/entries"],
   });
 
-  const today = new Date();
-  const formattedToday = formatDate(today);
+  // Filter habits based on date selection
+  const filteredHabits = useMemo(() => {
+    if (!habits) return [];
+    
+    return habits.filter(habit => {
+      // If the habit start date is after the selected date, don't show it
+      const habitStartDate = parseISO(habit.startDate.toString());
+      if (isAfter(habitStartDate, selectedDate)) {
+        return false;
+      }
+      
+      // Check if the habit is active on the selected day
+      return isDateActive(selectedDate, habit.targetDays);
+    });
+  }, [habits, selectedDate]);
+  
+  const formattedSelectedDate = formatDate(selectedDate);
+  const isSelectedDateToday = isSameDay(selectedDate, new Date());
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
@@ -37,10 +60,13 @@ export default function Dashboard() {
           <div className="mb-8">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between">
               <div>
-                <h1 className="text-2xl font-bold font-sans text-gray-900">Today's Habits</h1>
-                <p className="mt-1 text-sm text-gray-500">{formattedToday}</p>
+                <h1 className="text-2xl font-bold font-sans text-gray-900">
+                  {isSelectedDateToday ? "Today's Habits" : "Habits"}
+                </h1>
+                <p className="mt-1 text-sm text-gray-500">{formattedSelectedDate}</p>
               </div>
-              <div className="mt-4 md:mt-0">
+              <div className="flex flex-col md:flex-row items-center gap-4 mt-4 md:mt-0">
+                <DatePicker date={selectedDate} onDateChange={setSelectedDate} />
                 <Button 
                   onClick={() => setShowAddHabitDialog(true)}
                   className="inline-flex items-center"
@@ -73,9 +99,9 @@ export default function Dashboard() {
               <div className="col-span-full text-center p-8 bg-white rounded-lg shadow-sm border border-gray-200">
                 <p className="text-red-500">Error loading habits. Please try again later.</p>
               </div>
-            ) : habits && habits.length > 0 ? (
+            ) : filteredHabits && filteredHabits.length > 0 ? (
               // Actual habit cards
-              habits.map((habit) => (
+              filteredHabits.map((habit) => (
                 <HabitCard key={habit.id} habit={habit} />
               ))
             ) : (
@@ -94,15 +120,23 @@ export default function Dashboard() {
           {/* Performance Section */}
           {habits && habits.length > 0 && (
             <div className="mt-12">
-              <h2 className="text-xl font-bold font-sans text-gray-900 mb-6">Performance Overview</h2>
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+                <h2 className="text-xl font-bold font-sans text-gray-900">Performance Overview</h2>
+                <div className="mt-2 md:mt-0">
+                  <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
+                </div>
+              </div>
               <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Completion History</h3>
                 {isLoadingEntries ? (
                   <div className="h-64 flex items-center justify-center">
                     <p className="text-gray-500">Loading completion history...</p>
                   </div>
                 ) : (
-                  <CompletionHeatmap habits={habits} entries={entries || []} />
+                  <CompletionHeatmap 
+                    habits={habits} 
+                    entries={entries || []} 
+                    daysToShow={timeRange}
+                  />
                 )}
               </div>
             </div>
