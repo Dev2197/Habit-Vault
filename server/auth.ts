@@ -5,7 +5,7 @@ import session from "express-session";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
-import { User as SelectUser } from "@shared/schema";
+import { User, User as SelectUser } from "@shared/schema";
 
 declare global {
   namespace Express {
@@ -46,11 +46,11 @@ export function setupAuth(app: Express) {
 
   passport.use(
     new LocalStrategy({
-      usernameField: 'username',
+      usernameField: 'email',
       passwordField: 'password'
-    }, async (username, password, done) => {
+    }, async (email, password, done) => {
       try {
-        const user = await storage.getUserByUsername(username);
+        const user = await storage.getUserByEmail(email);
         if (!user || !(await comparePasswords(password, user.password))) {
           return done(null, false);
         } else {
@@ -74,18 +74,24 @@ export function setupAuth(app: Express) {
 
   app.post("/api/register", async (req, res, next) => {
     try {
-      const { username, password, email } = req.body;
+      const { name, email, password } = req.body;
       
-      if (!username || !password || !email) {
-        return res.status(400).json({ message: "Username, password, and email are required" });
+      if (!name || !email || !password) {
+        return res.status(400).json({ message: "Name, email, and password are required" });
       }
 
-      const existingUser = await storage.getUserByUsername(username);
+      // Generate a username from email (used internally)
+      const username = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '') + 
+                       Math.floor(Math.random() * 1000);
+
+      // Check if email already exists
+      const existingUser = await storage.getUserByEmail(email);
       if (existingUser) {
-        return res.status(400).json({ message: "Username already exists" });
+        return res.status(400).json({ message: "Email already exists" });
       }
 
       const user = await storage.createUser({
+        name,
         username,
         email,
         password: await hashPassword(password),
@@ -101,9 +107,9 @@ export function setupAuth(app: Express) {
   });
 
   app.post("/api/login", (req, res, next) => {
-    passport.authenticate("local", (err, user, info) => {
+    passport.authenticate("local", (err: Error, user: User, info: any) => {
       if (err) { return next(err); }
-      if (!user) { return res.status(401).json({ message: "Invalid username or password" }); }
+      if (!user) { return res.status(401).json({ message: "Invalid email or password" }); }
       
       req.login(user, (err) => {
         if (err) { return next(err); }

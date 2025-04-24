@@ -20,13 +20,13 @@ import { CheckCircle, Shield, CalendarCheck } from "lucide-react";
 
 // Login form schema
 const loginSchema = z.object({
-  username: z.string().min(3, "Username must be at least 3 characters"),
+  email: z.string().email("Please enter a valid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
 // Registration form schema
 const registerSchema = z.object({
-  username: z.string().min(3, "Username must be at least 3 characters"),
+  name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Please enter a valid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
   confirmPassword: z.string().min(6, "Password must be at least 6 characters"),
@@ -54,7 +54,7 @@ export default function AuthPage() {
   const loginForm = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      username: "",
+      email: "",
       password: "",
     },
   });
