@@ -1,8 +1,9 @@
 import { useState, useMemo } from "react";
-import { format, parseISO, subDays, eachDayOfInterval } from "date-fns";
+import { format, parseISO, subDays, eachDayOfInterval, isAfter, isBefore, addDays } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { HabitWithStats } from "@shared/schema";
+import { Calendar, Flame, Activity } from "lucide-react";
 
 interface CompletionHeatmapProps {
   habits: HabitWithStats[];
@@ -51,64 +52,93 @@ export default function CompletionHeatmap({ habits, entries }: CompletionHeatmap
   
   // Get cell color based on completion status
   const getCellColor = (habitId: number, date: string, targetDays: string) => {
-    // Check if the habit exists on the given date
-    if (!entriesByHabitAndDate[habitId] || !entriesByHabitAndDate[habitId][date]) {
-      // Check if this habit should be active on this date
-      const dateObj = parseISO(date);
-      const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 1 = Monday, ...
-      
-      // Handle different target days
-      if (targetDays === "weekdays" && (dayOfWeek === 0 || dayOfWeek === 6)) {
-        return "bg-gray-100"; // weekend - not scheduled
-      }
-      
-      if (targetDays === "weekends" && dayOfWeek !== 0 && dayOfWeek !== 6) {
-        return "bg-gray-100"; // weekday - not scheduled
-      }
-      
-      if (targetDays.startsWith("[")) {
-        // Custom days (stored as JSON string)
-        try {
-          const customDays = JSON.parse(targetDays);
-          const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-          if (!customDays.includes(dayNames[dayOfWeek])) {
-            return "bg-gray-100"; // not scheduled for this custom day
-          }
-        } catch (e) {
-          // If parsing fails, treat as everyday
+    const dateObj = parseISO(date);
+    const today = new Date();
+    const todayStr = format(today, 'yyyy-MM-dd');
+    
+    // If the date is in the future, show as not applicable
+    if (isAfter(dateObj, today)) {
+      return "bg-gray-50";
+    }
+    
+    // Find the habit for this ID
+    const habit = habits.find(h => h.id === habitId);
+    if (!habit) return "bg-gray-100";
+    
+    // If it's a date before the habit start date
+    const habitStartDate = parseISO(habit.startDate.toString());
+    if (isBefore(dateObj, habitStartDate)) {
+      return "bg-gray-100"; // before habit started
+    }
+    
+    // Check if this habit should be active on this date based on target days
+    const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 1 = Monday, ...
+    
+    // Handle different target days
+    if (targetDays === "weekdays" && (dayOfWeek === 0 || dayOfWeek === 6)) {
+      return "bg-gray-100"; // weekend - not scheduled
+    }
+    
+    if (targetDays === "weekends" && dayOfWeek !== 0 && dayOfWeek !== 6) {
+      return "bg-gray-100"; // weekday - not scheduled
+    }
+    
+    if (targetDays.startsWith("[")) {
+      // Custom days (stored as JSON string)
+      try {
+        const customDays = JSON.parse(targetDays);
+        const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+        if (!customDays.includes(dayNames[dayOfWeek])) {
+          return "bg-gray-100"; // not scheduled for this custom day
         }
+      } catch (e) {
+        // If parsing fails, treat as everyday
       }
-      
+    }
+    
+    // Check if there's an entry for this date
+    if (!entriesByHabitAndDate[habitId] || entriesByHabitAndDate[habitId][date] === undefined) {
       // If it's today's date and not yet completed
-      if (date === format(new Date(), 'yyyy-MM-dd')) {
-        return "bg-gray-200"; // today - not completed yet
+      if (date === todayStr) {
+        return "bg-gray-300"; // today - not completed yet
       }
       
-      // If it's a date before the habit start date
-      const habitStartDate = format(parseISO(habits.find(h => h.id === habitId)?.startDate.toString() || ''), 'yyyy-MM-dd');
-      if (date < habitStartDate) {
-        return "bg-gray-100"; // before habit started
-      }
-      
-      return "bg-red-500"; // missed
+      return "bg-red-400"; // missed
+    }
+    
+    // If explicitly marked as missed (not completed)
+    if (entriesByHabitAndDate[habitId][date] === false) {
+      return "bg-orange-400"; // marked as missed
     }
     
     // If it was completed
-    if (entriesByHabitAndDate[habitId][date]) {
-      // Calculate intensity level (1-5) based on streak at that point
-      // This is a simplified version - in a real app, you would calculate the streak for each day
-      const daysCompleted = Object.values(entriesByHabitAndDate[habitId]).filter(Boolean).length;
+    if (entriesByHabitAndDate[habitId][date] === true) {
+      // Calculate streak up to this point
+      let streak = 0;
+      let currentDate = dateObj;
       
-      if (daysCompleted <= 2) return "bg-primary-100";
-      if (daysCompleted <= 5) return "bg-primary-200";
-      if (daysCompleted <= 10) return "bg-primary-300";
-      if (daysCompleted <= 20) return "bg-primary-400";
-      if (daysCompleted <= 30) return "bg-primary-500";
-      if (daysCompleted <= 50) return "bg-primary-600";
-      return "bg-primary-700";
+      while (true) {
+        const currentDateStr = format(currentDate, 'yyyy-MM-dd');
+        
+        // If we have a completed entry for this date, increment streak
+        if (entriesByHabitAndDate[habitId]?.[currentDateStr] === true) {
+          streak++;
+          currentDate = subDays(currentDate, 1);
+        } else {
+          break;
+        }
+      }
+      
+      // Return color based on streak length
+      if (streak <= 1) return "bg-green-300";
+      if (streak <= 3) return "bg-green-400";
+      if (streak <= 7) return "bg-green-500";
+      if (streak <= 14) return "bg-green-600";
+      if (streak <= 30) return "bg-green-700";
+      return "bg-green-800";
     }
     
-    return "bg-red-500"; // missed
+    return "bg-gray-200"; // default
   };
 
   // Function to calculate month label
@@ -133,16 +163,36 @@ export default function CompletionHeatmap({ habits, entries }: CompletionHeatmap
   }, [dates]);
 
   return (
-    <div>
-      <div className="flex justify-end mb-4">
+    <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+      <div className="flex justify-between items-center mb-6">
+        <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+          <Calendar className="w-5 h-5 mr-2 text-primary" />
+          Performance Overview
+        </h3>
         <Select value={daysToShow} onValueChange={setDaysToShow}>
-          <SelectTrigger className="w-32">
-            <SelectValue placeholder="Period" />
+          <SelectTrigger className="w-40">
+            <Calendar className="h-4 w-4 mr-2" />
+            <SelectValue placeholder="Time Period" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="7">Last Week</SelectItem>
-            <SelectItem value="30">Last Month</SelectItem>
-            <SelectItem value="90">Last 3 Months</SelectItem>
+            <SelectItem value="7">
+              <div className="flex items-center">
+                <Calendar className="h-4 w-4 mr-2" />
+                Last Week
+              </div>
+            </SelectItem>
+            <SelectItem value="30">
+              <div className="flex items-center">
+                <Calendar className="h-4 w-4 mr-2" />
+                Last Month
+              </div>
+            </SelectItem>
+            <SelectItem value="90">
+              <div className="flex items-center">
+                <Calendar className="h-4 w-4 mr-2" />
+                Last 3 Months
+              </div>
+            </SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -151,7 +201,7 @@ export default function CompletionHeatmap({ habits, entries }: CompletionHeatmap
         <div className="min-w-max">
           {/* Days Header */}
           <div className="flex mb-2">
-            <div className="w-20"></div>
+            <div className="w-32"></div>
             <div className="flex space-x-2">
               {daysOfWeek.map((day, index) => (
                 <div key={index} className="text-xs font-medium text-gray-500 w-8 text-center">
@@ -161,42 +211,70 @@ export default function CompletionHeatmap({ habits, entries }: CompletionHeatmap
             </div>
           </div>
           
-          {/* Habit Rows */}
-          {habits.map((habit) => (
-            <div key={habit.id} className="flex items-center mb-3">
-              <div className="w-20 text-xs font-medium text-gray-700 truncate pr-2">
-                {habit.name}
-              </div>
-              <div className="flex space-x-2">
-                {dates.slice(0, 7).map((date, index) => (
-                  <div
-                    key={index}
-                    className={cn(
-                      "calendar-day w-8 h-8 rounded-md cursor-pointer transition-transform duration-200 hover:scale-110",
-                      getCellColor(habit.id, date, habit.targetDays)
-                    )}
-                    title={`${format(parseISO(date), 'PP')}: ${
-                      entriesByHabitAndDate[habit.id]?.[date] ? 'Completed' :
-                      date === format(new Date(), 'yyyy-MM-dd') ? 'Not completed yet' :
-                      'Missed'
-                    }`}
-                  />
-                ))}
-              </div>
+          {habits.length === 0 ? (
+            <div className="text-center py-10 text-gray-500">
+              No habits to display. Add a habit to see your performance.
             </div>
-          ))}
+          ) : (
+            /* Habit Rows */
+            habits.map((habit) => (
+              <div key={habit.id} className="flex items-center mb-4">
+                <div className="w-32 text-sm font-medium text-gray-700 truncate pr-2 flex items-center">
+                  {habit.currentStreak >= 3 && (
+                    <span title={`${habit.currentStreak} day streak!`}>
+                      <Flame className="w-4 h-4 mr-1 text-orange-500" />
+                    </span>
+                  )}
+                  {habit.name}
+                  {habit.currentStreak > 0 && (
+                    <span className="ml-1 text-xs text-primary">({habit.currentStreak})</span>
+                  )}
+                </div>
+                <div className="flex space-x-2">
+                  {dates.slice(0, parseInt(daysToShow) > 7 ? 7 : parseInt(daysToShow)).map((date, index) => (
+                    <div
+                      key={index}
+                      className={cn(
+                        "calendar-day w-8 h-8 rounded-md cursor-pointer transition-all duration-200 hover:scale-110 flex items-center justify-center",
+                        getCellColor(habit.id, date, habit.targetDays)
+                      )}
+                      title={`${format(parseISO(date), 'PP')}: ${
+                        entriesByHabitAndDate[habit.id]?.[date] === true ? 'Completed' :
+                        entriesByHabitAndDate[habit.id]?.[date] === false ? 'Missed' :
+                        date === format(new Date(), 'yyyy-MM-dd') ? 'Not completed yet' :
+                        'Not marked'
+                      }`}
+                    >
+                      {entriesByHabitAndDate[habit.id]?.[date] === true && (
+                        <Activity className="w-4 h-4 text-white" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
           
           {/* Legend */}
           <div className="mt-6 flex items-center justify-end">
-            <div className="text-xs text-gray-500 mr-2">Completion Level:</div>
-            <div className="flex items-center space-x-1">
-              <div className="w-4 h-4 rounded bg-gray-100"></div>
-              <div className="w-4 h-4 rounded bg-primary-100"></div>
-              <div className="w-4 h-4 rounded bg-primary-300"></div>
-              <div className="w-4 h-4 rounded bg-primary-500"></div>
-              <div className="w-4 h-4 rounded bg-primary-700"></div>
-              <div className="ml-2 w-4 h-4 rounded bg-red-500"></div>
-              <span className="text-xs text-gray-500 ml-1">Missed</span>
+            <div className="text-xs text-gray-500 mr-2">Status:</div>
+            <div className="flex items-center space-x-3">
+              <div className="flex items-center">
+                <div className="w-4 h-4 rounded bg-green-500 mr-1"></div>
+                <span className="text-xs text-gray-700">Completed</span>
+              </div>
+              <div className="flex items-center">
+                <div className="w-4 h-4 rounded bg-orange-400 mr-1"></div>
+                <span className="text-xs text-gray-700">Missed</span>
+              </div>
+              <div className="flex items-center">
+                <div className="w-4 h-4 rounded bg-red-400 mr-1"></div>
+                <span className="text-xs text-gray-700">Not Marked</span>
+              </div>
+              <div className="flex items-center">
+                <div className="w-4 h-4 rounded bg-gray-100 mr-1"></div>
+                <span className="text-xs text-gray-700">Not Scheduled</span>
+              </div>
             </div>
           </div>
         </div>
