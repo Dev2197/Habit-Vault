@@ -65,9 +65,19 @@ export default function DatePicker({ date, onDateChange }: DatePickerProps) {
             selected={date}
             onSelect={(day) => {
               if (day) {
-                onDateChange(day);
-                setOpen(false);
+                // Don't allow selecting future dates
+                const selectedDate = day;
+                const today = new Date();
+                
+                if (selectedDate <= today) {
+                  onDateChange(selectedDate);
+                  setOpen(false);
+                }
               }
+            }}
+            disabled={(date) => {
+              // Disable future dates
+              return date > new Date();
             }}
             initialFocus
           />
