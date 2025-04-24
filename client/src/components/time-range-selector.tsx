@@ -7,7 +7,7 @@ interface TimeRangeSelectorProps {
 export default function TimeRangeSelector({ value }: TimeRangeSelectorProps) {
   return (
     <Button className="inline-flex items-center">
-      {value === "7" ? "Last Week" : "Last Month"}
+      {value === "7" ? "Last 7 Days" : "Last Month"}
     </Button>
   );
 }
