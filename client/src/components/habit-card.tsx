@@ -12,9 +12,10 @@ import DeleteHabitDialog from "./delete-habit-dialog";
 
 interface HabitCardProps {
   habit: HabitWithStats;
+  selectedDate: Date;
 }
 
-export default function HabitCard({ habit }: HabitCardProps) {
+export default function HabitCard({ habit, selectedDate }: HabitCardProps) {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const queryClient = useQueryClient();

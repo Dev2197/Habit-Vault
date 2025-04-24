@@ -105,7 +105,7 @@ export default function Dashboard() {
             ) : filteredHabits && filteredHabits.length > 0 ? (
               // Actual habit cards
               filteredHabits.map((habit) => (
-                <HabitCard key={habit.id} habit={habit} />
+                <HabitCard key={habit.id} habit={habit} selectedDate={selectedDate} />
               ))
             ) : habits && habits.length > 0 && filteredHabits.length === 0 ? (
               // No habits for selected date
