@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { HabitWithStats } from "@shared/schema";
 import { Button } from "@/components/ui/button";
-import { Pencil, Trash2, Circle, CheckCircle2 } from "lucide-react";
+import { Pencil, Trash2, Circle, CheckCircle2, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getTargetDaysLabel } from "@/lib/utils/date-utils";
 import { apiRequest } from "@/lib/queryClient";
@@ -31,29 +31,45 @@ export default function HabitCard({ habit }: HabitCardProps) {
     ? new Date(habit.lastCompletedDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : '-';
   
-  // Toggle habit completion mutation
-  const toggleCompletionMutation = useMutation({
-    mutationFn: async () => {
+  // Toggle habit status mutation
+  const updateHabitStatusMutation = useMutation({
+    mutationFn: async (status: 'completed' | 'missed' | 'unmarked') => {
       const res = await apiRequest("POST", `/api/habits/${habit.id}/toggle`, {
-        date: new Date().toISOString().split("T")[0]
+        date: new Date().toISOString().split("T")[0],
+        status
       });
+      if (status === 'unmarked') {
+        return null; // No content returned for unmarked status
+      }
       return await res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_, status) => {
       queryClient.invalidateQueries({ queryKey: ["/api/habits"] });
       queryClient.invalidateQueries({ queryKey: ["/api/entries"] });
       
-      toast({
-        title: habit.completedToday ? "Habit marked as incomplete" : "Habit completed!",
-        description: habit.completedToday 
-          ? "Your streak has been updated." 
-          : `Keep it up! Current streak: ${habit.currentStreak + 1}`,
-        variant: habit.completedToday ? "default" : "success",
-      });
+      if (status === 'completed') {
+        toast({
+          title: "Habit completed!",
+          description: `Keep it up! Current streak: ${habit.currentStreak + 1}`,
+          variant: "default",
+        });
+      } else if (status === 'missed') {
+        toast({
+          title: "Habit marked as missed",
+          description: "It's okay to miss sometimes. Your streak has been updated.",
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "Habit mark removed",
+          description: "Habit status has been reset for today.",
+          variant: "default",
+        });
+      }
     },
     onError: (error) => {
       toast({
-        title: "Error toggling habit status",
+        title: "Error updating habit status",
         description: error.message,
         variant: "destructive",
       });
@@ -124,26 +140,40 @@ export default function HabitCard({ habit }: HabitCardProps) {
         </div>
         
         <div className="mt-6">
-          <Button 
-            className={cn(
-              "w-full flex items-center justify-center",
-              habit.completedToday ? "bg-green-500 hover:bg-green-600" : ""
-            )}
-            disabled={toggleCompletionMutation.isPending}
-            onClick={() => toggleCompletionMutation.mutate()}
-          >
-            {habit.completedToday ? (
-              <>
-                <CheckCircle2 className="-ml-1 mr-2 h-5 w-5" />
-                Completed
-              </>
-            ) : (
-              <>
-                <Circle className="-ml-1 mr-2 h-5 w-5" />
-                Mark as Done
-              </>
-            )}
-          </Button>
+          <div className="grid grid-cols-3 gap-2">
+            <Button 
+              className={cn(
+                "flex items-center justify-center",
+                habit.completedToday ? "bg-green-500 hover:bg-green-600" : ""
+              )}
+              disabled={updateHabitStatusMutation.isPending}
+              onClick={() => updateHabitStatusMutation.mutate('completed')}
+              variant={habit.completedToday ? "default" : "outline"}
+            >
+              <CheckCircle2 className="mr-1 h-4 w-4" />
+              Done
+            </Button>
+            
+            <Button 
+              className="flex items-center justify-center"
+              disabled={updateHabitStatusMutation.isPending}
+              onClick={() => updateHabitStatusMutation.mutate('missed')}
+              variant={habit.completedToday === false && habit.lastCompletedDate === new Date().toISOString().split('T')[0] ? "default" : "outline"}
+            >
+              <XCircle className="mr-1 h-4 w-4" />
+              Missed
+            </Button>
+            
+            <Button 
+              className="flex items-center justify-center"
+              disabled={updateHabitStatusMutation.isPending}
+              onClick={() => updateHabitStatusMutation.mutate('unmarked')}
+              variant="outline"
+            >
+              <Circle className="mr-1 h-4 w-4" />
+              Clear
+            </Button>
+          </div>
         </div>
       </div>
       
@@ -151,11 +181,15 @@ export default function HabitCard({ habit }: HabitCardProps) {
         <div className="text-xs text-gray-500 flex justify-between items-center">
           <span>Started {diffDays > 1 ? `${diffDays} days ago` : 'today'}</span>
           {habit.completedToday ? (
-            <span>{lastCompletionTime}</span>
+            <span className="text-green-600 font-medium">Completed at {lastCompletionTime}</span>
           ) : (
-            habit.currentStreak > 10 ? (
-              <span className="text-red-500 font-medium">Don't break your streak!</span>
-            ) : null
+            habit.lastCompletedDate === new Date().toISOString().split('T')[0] ? (
+              <span className="text-orange-600 font-medium">Marked as missed today</span>
+            ) : (
+              habit.currentStreak > 5 ? (
+                <span className="text-red-500 font-medium">Don't break your streak!</span>
+              ) : null
+            )
           )}
         </div>
       </div>
