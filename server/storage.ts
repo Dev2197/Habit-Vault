@@ -1,11 +1,16 @@
 import { users, habits, habitEntries, type User, type InsertUser, type Habit, type InsertHabit, type HabitEntry, type InsertHabitEntry } from "@shared/schema";
 import session from "express-session";
 import { db } from "./db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import connectPg from "connect-pg-simple";
+import { Pool } from "@neondatabase/serverless";
 import { pool } from "./db";
 
 const PostgresSessionStore = connectPg(session);
+// Define SessionStore type
+type SessionStore = ReturnType<typeof connectPg> & {
+  new (options: { pool: Pool, createTableIfMissing?: boolean }): session.Store;
+};
 
 // Storage interface
 export interface IStorage {
@@ -31,11 +36,11 @@ export interface IStorage {
   deleteHabitEntry(id: number): Promise<void>;
   
   // Session store
-  sessionStore: session.SessionStore;
+  sessionStore: session.Store;
 }
 
 export class DatabaseStorage implements IStorage {
-  sessionStore: session.SessionStore;
+  sessionStore: session.Store;
   
   constructor() {
     this.sessionStore = new PostgresSessionStore({ 
@@ -119,13 +124,15 @@ export class DatabaseStorage implements IStorage {
   }
   
   async getHabitEntryByDate(habitId: number, date: string): Promise<HabitEntry | undefined> {
-    // Convert date string to Date object
+    // Convert date string to a properly formatted date string YYYY-MM-DD
     const dateObj = new Date(date);
+    const formattedDate = dateObj.toISOString().split('T')[0];
     
+    // Use SQL string to handle date comparison
     const result = await db.select().from(habitEntries).where(
       and(
         eq(habitEntries.habitId, habitId),
-        eq(habitEntries.date, dateObj)
+        sql`CAST(${habitEntries.date} AS TEXT) = ${formattedDate}`
       )
     );
     
