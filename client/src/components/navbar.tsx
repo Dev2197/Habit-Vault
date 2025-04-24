@@ -30,7 +30,6 @@ export default function Navbar() {
   const navItems = [
     { href: "/", label: "Dashboard", icon: <HomeIcon className="h-5 w-5" /> },
     { href: "/analytics", label: "Analytics", icon: <BarChart className="h-5 w-5" /> },
-    { href: "/settings", label: "Settings", icon: <Settings className="h-5 w-5" /> },
   ];
 
   return (
@@ -82,15 +81,7 @@ export default function Navbar() {
                     )}
                   </div>
                 </div>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href="/settings">
-                    <a className="flex cursor-pointer items-center">
-                      <Settings className="mr-2 h-4 w-4" />
-                      Settings
-                    </a>
-                  </Link>
-                </DropdownMenuItem>
+
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="cursor-pointer"

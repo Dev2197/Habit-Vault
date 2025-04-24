@@ -76,22 +76,17 @@ export class DatabaseStorage implements IStorage {
   }
   
   async createHabit(insertHabit: InsertHabit): Promise<Habit> {
-    // Ensure startDate is a Date object
-    let habitData = { ...insertHabit };
-    if (typeof habitData.startDate === 'string') {
-      habitData.startDate = new Date(habitData.startDate);
-    }
+    // Make a copy of the data to avoid modifying the input
+    const habitData = { ...insertHabit };
     
+    // We'll let the database handle the date conversion
     const result = await db.insert(habits).values(habitData).returning();
     return result[0];
   }
   
   async updateHabit(id: number, updates: Partial<Habit>): Promise<Habit> {
-    // Ensure startDate is a Date object if present
-    let updateData = { ...updates };
-    if (updateData.startDate && typeof updateData.startDate === 'string') {
-      updateData.startDate = new Date(updateData.startDate);
-    }
+    // Make a copy of the data to avoid modifying the input
+    const updateData = { ...updates };
     
     const result = await db.update(habits)
       .set(updateData)
@@ -148,22 +143,16 @@ export class DatabaseStorage implements IStorage {
   }
   
   async createHabitEntry(insertEntry: InsertHabitEntry): Promise<HabitEntry> {
-    // Ensure date is a Date object
-    let entryData = { ...insertEntry };
-    if (typeof entryData.date === 'string') {
-      entryData.date = new Date(entryData.date);
-    }
+    // Make a copy of the data to avoid modifying the input
+    const entryData = { ...insertEntry };
     
     const result = await db.insert(habitEntries).values(entryData).returning();
     return result[0];
   }
   
   async updateHabitEntry(id: number, updates: Partial<HabitEntry>): Promise<HabitEntry> {
-    // Ensure date is a Date object if present
-    let updateData = { ...updates };
-    if (updateData.date && typeof updateData.date === 'string') {
-      updateData.date = new Date(updateData.date);
-    }
+    // Make a copy of the data to avoid modifying the input
+    const updateData = { ...updates };
     
     const result = await db.update(habitEntries)
       .set(updateData)

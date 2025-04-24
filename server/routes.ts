@@ -201,14 +201,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (existingEntry) {
         // If status is provided, set the value directly
         if (status !== undefined) {
-          const completed = status === 'completed';
+          // Handle the three possible states: completed, missed, or not marked
+          let completed = false;
+          
+          if (status === 'completed') {
+            completed = true;
+          } else if (status === 'missed') {
+            completed = false;
+          } else if (status === 'unmarked') {
+            // Delete the entry to remove the mark completely
+            await storage.deleteHabitEntry(existingEntry.id);
+            return res.status(204).send();
+          }
+          
           const updated = await storage.updateHabitEntry(
             existingEntry.id, 
             { completed }
           );
           return res.json(updated);
         } else {
-          // Toggle the existing entry if no status provided
+          // Toggle between completed and missed if no status provided
+          // This is the legacy behavior for backward compatibility
           const updated = await storage.updateHabitEntry(
             existingEntry.id, 
             { completed: !existingEntry.completed }
@@ -216,8 +229,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.json(updated);
         }
       } else {
-        // Create a new entry
-        const completed = status === undefined || status === 'completed';
+        // Create a new entry with the specified status
+        let completed = true; // Default to completed for backward compatibility
+        
+        if (status === 'missed') {
+          completed = false;
+        } else if (status === 'unmarked') {
+          // No need to create an entry for unmarked
+          return res.status(204).send();
+        }
+        
         const newEntry = await storage.createHabitEntry({
           habitId,
           userId: req.user!.id,
