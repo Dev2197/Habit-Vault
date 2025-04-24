@@ -183,7 +183,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/habits/:id/toggle", ensureAuthenticated, async (req, res) => {
     try {
       const habitId = parseInt(req.params.id);
-      const { date = new Date().toISOString().split('T')[0] } = req.body;
+      const { date = new Date().toISOString().split('T')[0], status } = req.body;
       
       const habit = await storage.getHabit(habitId);
       
@@ -199,19 +199,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const existingEntry = await storage.getHabitEntryByDate(habitId, date);
       
       if (existingEntry) {
-        // Toggle the existing entry
-        const updated = await storage.updateHabitEntry(
-          existingEntry.id, 
-          { completed: !existingEntry.completed }
-        );
-        return res.json(updated);
+        // If status is provided, set the value directly
+        if (status !== undefined) {
+          const completed = status === 'completed';
+          const updated = await storage.updateHabitEntry(
+            existingEntry.id, 
+            { completed }
+          );
+          return res.json(updated);
+        } else {
+          // Toggle the existing entry if no status provided
+          const updated = await storage.updateHabitEntry(
+            existingEntry.id, 
+            { completed: !existingEntry.completed }
+          );
+          return res.json(updated);
+        }
       } else {
         // Create a new entry
+        const completed = status === undefined || status === 'completed';
         const newEntry = await storage.createHabitEntry({
           habitId,
           userId: req.user!.id,
           date,
-          completed: true
+          completed
         });
         return res.status(201).json(newEntry);
       }

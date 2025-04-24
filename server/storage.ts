@@ -1,8 +1,11 @@
 import { users, habits, habitEntries, type User, type InsertUser, type Habit, type InsertHabit, type HabitEntry, type InsertHabitEntry } from "@shared/schema";
 import session from "express-session";
-import createMemoryStore from "memorystore";
+import { db } from "./db";
+import { eq, and } from "drizzle-orm";
+import connectPg from "connect-pg-simple";
+import { pool } from "./db";
 
-const MemoryStore = createMemoryStore(session);
+const PostgresSessionStore = connectPg(session);
 
 // Storage interface
 export interface IStorage {
@@ -31,184 +34,151 @@ export interface IStorage {
   sessionStore: session.SessionStore;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private habits: Map<number, Habit>;
-  private habitEntries: Map<number, HabitEntry>;
+export class DatabaseStorage implements IStorage {
   sessionStore: session.SessionStore;
   
-  private userIdCounter: number;
-  private habitIdCounter: number;
-  private habitEntryIdCounter: number;
-
   constructor() {
-    this.users = new Map();
-    this.habits = new Map();
-    this.habitEntries = new Map();
-    this.userIdCounter = 1;
-    this.habitIdCounter = 1;
-    this.habitEntryIdCounter = 1;
-    this.sessionStore = new MemoryStore({
-      checkPeriod: 86400000 // prune expired entries every 24h
+    this.sessionStore = new PostgresSessionStore({ 
+      pool,
+      createTableIfMissing: true 
     });
   }
-
+  
   // User methods
   async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+    const result = await db.select().from(users).where(eq(users.id, id));
+    return result.length > 0 ? result[0] : undefined;
   }
-
+  
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username.toLowerCase() === username.toLowerCase()
-    );
+    const result = await db.select().from(users).where(eq(users.username, username));
+    return result.length > 0 ? result[0] : undefined;
   }
-
+  
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.userIdCounter++;
-    const now = new Date();
-    const user: User = { 
-      ...insertUser, 
-      id,
-      createdAt: now
-    };
-    this.users.set(id, user);
-    return user;
+    const result = await db.insert(users).values(insertUser).returning();
+    return result[0];
   }
-
+  
   // Habit methods
   async getHabit(id: number): Promise<Habit | undefined> {
-    return this.habits.get(id);
+    const result = await db.select().from(habits).where(eq(habits.id, id));
+    return result.length > 0 ? result[0] : undefined;
   }
-
+  
   async getHabitsByUserId(userId: number): Promise<Habit[]> {
-    return Array.from(this.habits.values()).filter(
-      (habit) => habit.userId === userId
-    );
+    return await db.select().from(habits).where(eq(habits.userId, userId));
   }
-
+  
   async createHabit(insertHabit: InsertHabit): Promise<Habit> {
-    const id = this.habitIdCounter++;
-    const now = new Date();
-    
-    // Handle date conversion for startDate
-    let startDate = insertHabit.startDate;
-    if (typeof startDate === 'string') {
-      startDate = new Date(startDate);
+    // Ensure startDate is a Date object
+    let habitData = { ...insertHabit };
+    if (typeof habitData.startDate === 'string') {
+      habitData.startDate = new Date(habitData.startDate);
     }
     
-    const habit: Habit = {
-      ...insertHabit,
-      id,
-      startDate,
-      createdAt: now
-    };
-    
-    this.habits.set(id, habit);
-    return habit;
+    const result = await db.insert(habits).values(habitData).returning();
+    return result[0];
   }
-
+  
   async updateHabit(id: number, updates: Partial<Habit>): Promise<Habit> {
-    const habit = this.habits.get(id);
-    if (!habit) {
+    // Ensure startDate is a Date object if present
+    let updateData = { ...updates };
+    if (updateData.startDate && typeof updateData.startDate === 'string') {
+      updateData.startDate = new Date(updateData.startDate);
+    }
+    
+    const result = await db.update(habits)
+      .set(updateData)
+      .where(eq(habits.id, id))
+      .returning();
+    
+    if (result.length === 0) {
       throw new Error(`Habit with ID ${id} not found`);
     }
     
-    // Handle date conversion for startDate if it exists in updates
-    let startDate = updates.startDate;
-    if (startDate && typeof startDate === 'string') {
-      startDate = new Date(startDate);
-      updates.startDate = startDate;
-    }
-    
-    const updatedHabit: Habit = { ...habit, ...updates };
-    this.habits.set(id, updatedHabit);
-    return updatedHabit;
+    return result[0];
   }
-
+  
   async deleteHabit(id: number): Promise<void> {
-    // Delete the habit
-    this.habits.delete(id);
+    // First delete associated entries
+    await db.delete(habitEntries).where(eq(habitEntries.habitId, id));
     
-    // Also delete all related entries
-    const entriesToDelete = Array.from(this.habitEntries.values())
-      .filter(entry => entry.habitId === id)
-      .map(entry => entry.id);
+    // Then delete the habit
+    const result = await db.delete(habits).where(eq(habits.id, id)).returning();
     
-    for (const entryId of entriesToDelete) {
-      this.habitEntries.delete(entryId);
+    if (result.length === 0) {
+      throw new Error(`Habit with ID ${id} not found`);
     }
   }
-
+  
   // Habit Entry methods
   async getHabitEntry(id: number): Promise<HabitEntry | undefined> {
-    return this.habitEntries.get(id);
+    const result = await db.select().from(habitEntries).where(eq(habitEntries.id, id));
+    return result.length > 0 ? result[0] : undefined;
   }
-
+  
   async getHabitEntryByDate(habitId: number, date: string): Promise<HabitEntry | undefined> {
-    // Convert date string to a Date object if it's a string
-    const dateObj = typeof date === 'string' ? new Date(date) : date;
-    const dateStr = dateObj.toISOString().split('T')[0]; // Format to YYYY-MM-DD
+    // Convert date string to Date object
+    const dateObj = new Date(date);
     
-    return Array.from(this.habitEntries.values()).find(
-      (entry) => entry.habitId === habitId && entry.date.toISOString().split('T')[0] === dateStr
+    const result = await db.select().from(habitEntries).where(
+      and(
+        eq(habitEntries.habitId, habitId),
+        eq(habitEntries.date, dateObj)
+      )
     );
+    
+    return result.length > 0 ? result[0] : undefined;
   }
-
+  
   async getHabitEntriesByHabitId(habitId: number): Promise<HabitEntry[]> {
-    return Array.from(this.habitEntries.values()).filter(
-      (entry) => entry.habitId === habitId
-    );
+    return await db.select().from(habitEntries).where(eq(habitEntries.habitId, habitId));
   }
-
+  
   async getHabitEntriesByUserId(userId: number): Promise<HabitEntry[]> {
-    return Array.from(this.habitEntries.values()).filter(
-      (entry) => entry.userId === userId
-    );
+    return await db.select().from(habitEntries).where(eq(habitEntries.userId, userId));
   }
-
+  
   async createHabitEntry(insertEntry: InsertHabitEntry): Promise<HabitEntry> {
-    const id = this.habitEntryIdCounter++;
-    const now = new Date();
-    
-    // Handle date conversion for the date field
-    let entryDate = insertEntry.date;
-    if (typeof entryDate === 'string') {
-      entryDate = new Date(entryDate);
+    // Ensure date is a Date object
+    let entryData = { ...insertEntry };
+    if (typeof entryData.date === 'string') {
+      entryData.date = new Date(entryData.date);
     }
     
-    const entry: HabitEntry = {
-      ...insertEntry,
-      id,
-      date: entryDate,
-      createdAt: now
-    };
-    
-    this.habitEntries.set(id, entry);
-    return entry;
+    const result = await db.insert(habitEntries).values(entryData).returning();
+    return result[0];
   }
-
+  
   async updateHabitEntry(id: number, updates: Partial<HabitEntry>): Promise<HabitEntry> {
-    const entry = this.habitEntries.get(id);
-    if (!entry) {
+    // Ensure date is a Date object if present
+    let updateData = { ...updates };
+    if (updateData.date && typeof updateData.date === 'string') {
+      updateData.date = new Date(updateData.date);
+    }
+    
+    const result = await db.update(habitEntries)
+      .set(updateData)
+      .where(eq(habitEntries.id, id))
+      .returning();
+    
+    if (result.length === 0) {
       throw new Error(`Habit entry with ID ${id} not found`);
     }
     
-    // Handle date conversion for the date field if it exists in updates
-    let entryDate = updates.date;
-    if (entryDate && typeof entryDate === 'string') {
-      entryDate = new Date(entryDate);
-      updates.date = entryDate;
-    }
-    
-    const updatedEntry: HabitEntry = { ...entry, ...updates };
-    this.habitEntries.set(id, updatedEntry);
-    return updatedEntry;
+    return result[0];
   }
-
+  
   async deleteHabitEntry(id: number): Promise<void> {
-    this.habitEntries.delete(id);
+    const result = await db.delete(habitEntries)
+      .where(eq(habitEntries.id, id))
+      .returning();
+    
+    if (result.length === 0) {
+      throw new Error(`Habit entry with ID ${id} not found`);
+    }
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
