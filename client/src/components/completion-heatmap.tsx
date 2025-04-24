@@ -1,6 +1,5 @@
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { format, parseISO, subDays, eachDayOfInterval, isAfter, isBefore, addDays } from "date-fns";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { HabitWithStats } from "@shared/schema";
 import { Calendar, Flame, Activity } from "lucide-react";
@@ -8,6 +7,7 @@ import { Calendar, Flame, Activity } from "lucide-react";
 interface CompletionHeatmapProps {
   habits: HabitWithStats[];
   entries: any[];
+  daysToShow?: string;
 }
 
 // Helper to group entries by habit and date
@@ -29,8 +29,7 @@ const groupEntriesByHabitAndDate = (entries: any[]) => {
   return grouped;
 };
 
-export default function CompletionHeatmap({ habits, entries }: CompletionHeatmapProps) {
-  const [daysToShow, setDaysToShow] = useState("30");
+export default function CompletionHeatmap({ habits, entries, daysToShow = "30" }: CompletionHeatmapProps) {
   
   // Group entries by habit and date
   const entriesByHabitAndDate = useMemo(() => {
@@ -164,37 +163,11 @@ export default function CompletionHeatmap({ habits, entries }: CompletionHeatmap
 
   return (
     <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-      <div className="flex justify-between items-center mb-6">
+      <div className="mb-6">
         <h3 className="text-lg font-semibold text-gray-900 flex items-center">
           <Calendar className="w-5 h-5 mr-2 text-primary" />
-          Performance Overview
+          Completion History
         </h3>
-        <Select value={daysToShow} onValueChange={setDaysToShow}>
-          <SelectTrigger className="w-40">
-            <Calendar className="h-4 w-4 mr-2" />
-            <SelectValue placeholder="Time Period" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="7">
-              <div className="flex items-center">
-                <Calendar className="h-4 w-4 mr-2" />
-                Last Week
-              </div>
-            </SelectItem>
-            <SelectItem value="30">
-              <div className="flex items-center">
-                <Calendar className="h-4 w-4 mr-2" />
-                Last Month
-              </div>
-            </SelectItem>
-            <SelectItem value="90">
-              <div className="flex items-center">
-                <Calendar className="h-4 w-4 mr-2" />
-                Last 3 Months
-              </div>
-            </SelectItem>
-          </SelectContent>
-        </Select>
       </div>
       
       <div className="overflow-x-auto">
@@ -231,7 +204,7 @@ export default function CompletionHeatmap({ habits, entries }: CompletionHeatmap
                   )}
                 </div>
                 <div className="flex space-x-2">
-                  {dates.slice(0, parseInt(daysToShow) > 7 ? 7 : parseInt(daysToShow)).map((date, index) => (
+                  {dates.slice(0, Math.min(parseInt(daysToShow), 14)).map((date, index) => (
                     <div
                       key={index}
                       className={cn(

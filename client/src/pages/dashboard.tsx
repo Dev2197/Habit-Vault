@@ -26,9 +26,12 @@ export default function Dashboard() {
     queryKey: ["/api/habits"],
   });
 
-  const { data: entries, isLoading: isLoadingEntries } = useQuery({
+  const { data: entriesData, isLoading: isLoadingEntries } = useQuery({
     queryKey: ["/api/entries"],
   });
+  
+  // Ensure entries is always an array
+  const entries = entriesData && Array.isArray(entriesData) ? entriesData : [];
 
   // Filter habits based on date selection
   const filteredHabits = useMemo(() => {
@@ -104,8 +107,25 @@ export default function Dashboard() {
               filteredHabits.map((habit) => (
                 <HabitCard key={habit.id} habit={habit} />
               ))
+            ) : habits && habits.length > 0 && filteredHabits.length === 0 ? (
+              // No habits for selected date
+              <div className="col-span-full text-center p-8 bg-white rounded-lg shadow-sm border border-gray-200">
+                <h3 className="font-medium text-gray-900 mb-2">No habits scheduled for this date</h3>
+                <p className="text-gray-500 mb-4">
+                  Either select a different date or add a new habit that includes this day
+                </p>
+                <div className="flex justify-center space-x-4">
+                  <Button variant="outline" onClick={() => setSelectedDate(new Date())}>
+                    Return to Today
+                  </Button>
+                  <Button onClick={() => setShowAddHabitDialog(true)}>
+                    <PlusIcon className="-ml-1 mr-2 h-5 w-5" />
+                    Add New Habit
+                  </Button>
+                </div>
+              </div>
             ) : (
-              // Empty state
+              // Empty state - no habits at all
               <div className="col-span-full text-center p-8 bg-white rounded-lg shadow-sm border border-gray-200">
                 <h3 className="font-medium text-gray-900 mb-2">No habits yet</h3>
                 <p className="text-gray-500 mb-4">Get started by adding your first habit</p>
@@ -134,7 +154,7 @@ export default function Dashboard() {
                 ) : (
                   <CompletionHeatmap 
                     habits={habits} 
-                    entries={entries || []} 
+                    entries={entries} 
                     daysToShow={timeRange}
                   />
                 )}
