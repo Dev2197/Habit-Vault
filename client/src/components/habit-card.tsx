@@ -139,42 +139,44 @@ export default function HabitCard({ habit }: HabitCardProps) {
           </div>
         </div>
         
-        <div className="mt-6">
-          <div className="grid grid-cols-3 gap-2">
-            <Button 
-              className={cn(
-                "flex items-center justify-center",
-                habit.completedToday ? "bg-green-500 hover:bg-green-600" : ""
-              )}
-              disabled={updateHabitStatusMutation.isPending}
-              onClick={() => updateHabitStatusMutation.mutate('completed')}
-              variant={habit.completedToday ? "default" : "outline"}
-            >
-              <CheckCircle2 className="mr-1 h-4 w-4" />
-              Done
-            </Button>
-            
-            <Button 
-              className="flex items-center justify-center"
-              disabled={updateHabitStatusMutation.isPending}
-              onClick={() => updateHabitStatusMutation.mutate('missed')}
-              variant={habit.completedToday === false && habit.lastCompletedDate === new Date().toISOString().split('T')[0] ? "default" : "outline"}
-            >
-              <XCircle className="mr-1 h-4 w-4" />
-              Missed
-            </Button>
-            
-            <Button 
-              className="flex items-center justify-center"
-              disabled={updateHabitStatusMutation.isPending}
-              onClick={() => updateHabitStatusMutation.mutate('unmarked')}
-              variant="outline"
-            >
-              <Circle className="mr-1 h-4 w-4" />
-              Clear
-            </Button>
+        {new Date(selectedDate).setHours(0,0,0,0) <= new Date().setHours(0,0,0,0) && (
+          <div className="mt-6">
+            <div className="grid grid-cols-3 gap-2">
+              <Button 
+                className={cn(
+                  "flex items-center justify-center",
+                  habit.completedToday ? "bg-green-500 hover:bg-green-600" : ""
+                )}
+                disabled={updateHabitStatusMutation.isPending}
+                onClick={() => updateHabitStatusMutation.mutate('completed')}
+                variant={habit.completedToday ? "default" : "outline"}
+              >
+                <CheckCircle2 className="mr-1 h-4 w-4" />
+                Done
+              </Button>
+              
+              <Button 
+                className="flex items-center justify-center"
+                disabled={updateHabitStatusMutation.isPending}
+                onClick={() => updateHabitStatusMutation.mutate('missed')}
+                variant={habit.completedToday === false && habit.lastCompletedDate === new Date().toISOString().split('T')[0] ? "default" : "outline"}
+              >
+                <XCircle className="mr-1 h-4 w-4" />
+                Missed
+              </Button>
+              
+              <Button 
+                className="flex items-center justify-center"
+                disabled={updateHabitStatusMutation.isPending}
+                onClick={() => updateHabitStatusMutation.mutate('unmarked')}
+                variant="outline"
+              >
+                <Circle className="mr-1 h-4 w-4" />
+                Clear
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
       
       <div className="bg-gray-50 px-5 py-3">
